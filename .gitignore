@@ -1,3 +1,7 @@
+# dev env
+.vscode
+main.cpp
+
 # Prerequisites
 *.d
 
