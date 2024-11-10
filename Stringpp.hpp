@@ -62,7 +62,8 @@ concept DStringCompatibleChar =
 
 enum class MatchAlgo: uint8_t {
     BruteForce, KR,
-    KMP, BM, Sunday
+    KMP, BMHBNFS_T, Sunday,
+    BMHBNFS_S
 };
 
 template<concepts::StringLike S>
@@ -229,13 +230,139 @@ template<concepts::StringLike S>
 class BMMatch: public MatchPattern<S> {
 private:
     S pattern;
+    std::unordered_map<typename S::value_type, size_t> bm_bc;
+    size_t k;
+
+    void build() {
+        typename S::const_iterator
+            front = pattern.cbegin(),
+            beg = pattern.cbegin(), end = pattern.cend();
+        size_t pat_size = end - beg;
+
+        // build k
+        std::vector<size_t> pi(pat_size, 0);
+        size_t index = 1; ++beg;
+        for (; beg != end; ++beg, ++index) {
+            size_t j = pi[index - 1];
+            while (j > 0 && *beg != *(front + j)) j = pi[j - 1];
+            if (*beg == *(front + j)) ++j;
+            pi[index] = j;
+        }
+        k = pat_size - pi.back();
+
+        // build bm_bc
+        beg = pattern.cbegin();
+        size_t loop_size = pat_size - 1;
+        auto last = *(end - 1);
+        bool flag = false;
+        for (; loop_size > 0; ++beg, --loop_size) {
+            bm_bc[*beg] = loop_size;
+            if (!flag && last == *beg) flag = true;
+        }
+        if (!flag) bm_bc[last] = pat_size;
+    }
+
 public:
-    BMMatch(const S& pat): pattern(pat) { }
+    BMMatch(const S& pat):
+    pattern(pat), bm_bc(), k(0) { build(); }
+
     size_t match(const S& str, size_t offset = 0) const override {
+        typename S::const_iterator
+            pat_begin = pattern.cbegin(), pat_end = pattern.cend(),
+            str_begin = str.cbegin(), str_end = str.cend();
+        auto bc_end = bm_bc.cend();
+        size_t str_size = str_end - str_begin;
+        size_t pat_size = pat_end - pat_begin;
+        size_t pat_last_pos = pat_size - 1;
+        // Invalid Offset
+        if (pat_size + offset > str_size) return S::npos;
+        str_begin += offset;
+
+        auto str_iter = str_begin + pat_last_pos;
+        for (; str_iter < str_end; ) {
+            // Check last char
+            auto pat_iter = pat_begin + pat_last_pos;
+            auto str_last_pos = str_iter;
+            if (*pat_iter == *str_iter) {
+                size_t loop_size = pat_size - 1;
+                bool found = true;
+                --pat_iter; --str_iter;
+                for (; loop_size > 0; --loop_size, --pat_iter, --str_iter) {
+                    if (*pat_iter != *str_iter) {
+                        found = false; break;
+                    }
+                }
+                if (found) return (++str_iter) - str.cbegin();
+            }
+
+            if (str_end - str_last_pos <= 1) return S::npos;
+            
+            auto bc_iter = bm_bc.find(*(str_last_pos + 1));
+            str_iter = str_last_pos;
+            if (bc_iter == bc_end) {
+                str_iter += pat_size + 1; // Sunday
+            } else {
+                // Horspool
+                auto m_iter = bm_bc.find(*str_last_pos);
+                if (m_iter == bc_end) str_iter += pat_size;
+                else str_iter += m_iter->second;
+            }
+        }
         return S::npos;
     }
+
     std::vector<size_t> matchAll(const S& str, bool digest) const override {
-        return std::vector<size_t>();
+        std::vector<size_t> results;
+        typename S::const_iterator
+            pat_begin = pattern.cbegin(), pat_end = pattern.cend(),
+            str_begin = str.cbegin(), str_end = str.cend();
+        auto bc_end = bm_bc.cend();
+        size_t str_size = str_end - str_begin;
+        size_t pat_size = pat_end - pat_begin;
+        size_t pat_last_pos = pat_size - 1;
+        size_t offset_0 = pat_last_pos;
+        size_t offset = offset_0;
+
+        auto str_iter = str_begin + pat_last_pos;
+        for (; str_iter < str_end; ) {
+            // Check last char
+            auto pat_iter = pat_begin + pat_last_pos;
+            auto str_last_pos = str_iter;
+            if (*pat_iter == *str_iter) {
+                size_t loop_size = offset;
+                bool found = true;
+                --pat_iter; --str_iter;
+                for (; loop_size > 0; --loop_size, --pat_iter, --str_iter) {
+                    if (*pat_iter != *str_iter) {
+                        found = false; break;
+                    }
+                }
+                if (found) {
+                    results.push_back(
+                        (str_last_pos - str_begin) - pat_last_pos
+                    );
+                    offset = k - 1;
+                    str_iter = str_last_pos;
+                    str_iter += (digest ? pat_size : k);
+                    continue;
+                }
+            }
+
+            if (str_end - str_last_pos <= 1) return results;
+            offset = pat_last_pos;
+            
+            auto bc_iter = bm_bc.find(*(str_last_pos + 1));
+            str_iter = str_last_pos;
+            if (bc_iter == bc_end) {
+                str_iter += pat_size + 1; // Sunday
+            } else {
+                // Horspool
+                auto m_iter = bm_bc.find(*str_last_pos);
+                if (m_iter == bc_end) str_iter += pat_size;
+                else str_iter += m_iter->second;
+            }
+        }
+        return results;
     }
 };
 
@@ -354,7 +481,7 @@ MatchPattern<S>* rawPatternFactory(
         return new KMPMatch<S>(pattern);
     case MatchAlgo::Sunday :
         return new SundayMatch<S>(pattern);
-    case MatchAlgo::BM :
+    case MatchAlgo::BMHBNFS_T :
         return new BMMatch<S>(pattern);
     case MatchAlgo::KR :
         return new KRMatch<S>(pattern);
@@ -379,7 +506,7 @@ std::shared_ptr<MatchPattern<S>> patternFactory(
         return std::make_shared<inner::KMPMatch<S>>(pattern);
     case MatchAlgo::Sunday :
         return std::make_shared<inner::SundayMatch<S>>(pattern);
-    case MatchAlgo::BM :
+    case MatchAlgo::BMHBNFS_T :
         return std::make_shared<inner::BMMatch<S>>(pattern);
     case MatchAlgo::KR :
         return std::make_shared<inner::KRMatch<S>>(pattern);
