@@ -15,6 +15,7 @@
 #include <unordered_map>
 
 namespace dsl {
+namespace stringpp {
 
 namespace concepts {
 
@@ -492,6 +493,8 @@ MatchPattern<S>* rawPatternFactory(
 
 } // namespace dsl::inner
 
+namespace functions {
+
 template<concepts::StringLike S>
 std::shared_ptr<MatchPattern<S>> patternFactory(
     const S& pattern,
@@ -538,6 +541,8 @@ std::vector<size_t> stringMatchAll(
     auto res = mat->matchAll(str, digest);
     delete mat; return res;
 }
+
+} // namespace dsl::functions
 
 class UTF8Char{
     
@@ -761,7 +766,7 @@ public:
         size_t offset = 0, 
         MatchAlgo algo = MatchAlgo::BruteForce
     ) const {
-        return stringMatch<self>(*this, pat, offset, algo);
+        return functions::stringMatch<self>(*this, pat, offset, algo);
     }
 
     std::vector<size_t> findAll(
@@ -769,7 +774,7 @@ public:
         bool digest = true,
         MatchAlgo algo = MatchAlgo::BruteForce
     ) const {
-        return stringMatchAll<self>(*this, pat, digest, algo);
+        return functions::stringMatchAll<self>(*this, pat, digest, algo);
     }
 
     // functions
@@ -874,15 +879,16 @@ namespace literals {
 
 } // namespace dsl::literals
 
-} // namespace dsl;
+}}
+// namespace dsl::stringpp
 
 // hash specialization
 
 namespace std {
 
     template<>
-    struct hash<dsl::UTF8Char> {
-        inline size_t operator() (dsl::UTF8Char chr) const noexcept {
+    struct hash<dsl::stringpp::UTF8Char> {
+        inline size_t operator() (dsl::stringpp::UTF8Char chr) const noexcept {
             return hash<uint32_t>()(chr.codePoint());
         }
     };
