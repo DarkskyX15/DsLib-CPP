@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <unordered_map>
 #include <limits>
+#include <queue>
 #include <stdint.h>
 
 #if __cplusplus >= 202002L
@@ -960,8 +961,8 @@ public:
     typedef utils::null_weight<weight_type> null_weight;
     typedef utils::index_limits<index_type> idx_limit;
 
-    static constexpr index_type ndex = idx_limit::max();
-    static constexpr weight_type npos = _StProv::fallback;
+    static constexpr index_type nindex = idx_limit::max();
+    static constexpr weight_type nweight = _StProv::fallback;
 
 private:
     typedef _IdxProv index_prov_t;
@@ -1108,6 +1109,24 @@ public:
         }
     }
 };
+
+namespace algorithms {
+
+template<
+    class _ValTp, class _WhtTp,
+    bool _Directed, class _IdxTp,
+    class _StProv, class _IdxProv
+>
+void DFS(
+    const SimpleGraph<
+        _ValTp, _WhtTp, _Directed, _IdxTp, _StProv, _IdxProv
+    >& cg
+) {
+    std::cout << _Directed << '\n';
+}
+
+}
+// namespace dsl::graph::algorithms
 
 }}
 // namespace dsl::graph
