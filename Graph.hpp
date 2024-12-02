@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstddef>
 #include <unordered_map>
+#include <unordered_set>
 #include <limits>
 #include <queue>
 #include <stdint.h>
@@ -241,6 +242,7 @@ public:
     typedef _WhtTp weight_type;
     typedef AdjPreview<_ValTp, _IdxTp, _WhtTp> preview_type;
     typedef std::vector<preview_type> adjacent_list;
+    typedef std::function<bool(_ValTp&)> callback_t;
 
 private:
     typedef std::remove_cv_t<_cvIdxProv> index_prov_t;
@@ -284,7 +286,7 @@ private:
         index_ptr = gc.index_ptr;
         storage_ptr = gc.storage_ptr;
         index = gc.index;
-#ifdef DSL_MACRO_COPY_FULL_ACCESSOR 
+#ifdef DSL_GRAPH_COPY_FULL_ACCESSOR 
         forth_list = gc.forth_list;
         back_list = gc.back_list;
 #endif
@@ -310,6 +312,10 @@ public:
     self& operator=(const self& ga) { copy_from(ga); return *this; }
     self& operator=(self&& ga) { move_from(ga); return *this; }
     
+    inline bool invalid() const {
+        return (index_ptr == nullptr || storage_ptr == nullptr);
+    }
+
     /**
      * 返回访问器对应的结点值的引用
      */
@@ -330,6 +336,13 @@ public:
     ) {
         index = dest;
         return updateAdjacent(update);
+    }
+
+    self next(
+        const index_type& dest,
+        defines::UpdateStrategy update = defines::UpdateStrategy::none
+    ) const {
+        return self(index_ptr, storage_ptr, dest).updateAdjacent(update);
     }
 
     self& updateAdjacent(
@@ -952,6 +965,16 @@ public:
 
 };
 
+/**
+ * 简单图的通用抽象
+ * 模板参数：
+ * `_ValTp` 值类型
+ * `_WhtTp` 权重类型
+ * `_Directed` 是否为有向图
+ * `_IdxTp` 下标类型
+ * `_StProv` 储存提供类型
+ * `_IdxProv` 下标提供类型
+ */
 template<
     DSL_MACRO_VALUE_TYPE _ValTp,
     DSL_MACRO_WEIGHT_TYPE _WhtTp,
@@ -1049,7 +1072,7 @@ public:
     size_t countVertex() const { return index_provider.size(); }
     size_t countEdge() const { return storage_provider.size(); }
 
-    void addEdge(
+    self& addEdge(
         const index_type& from,
         const index_type& to,
         const weight_type& weight = null_weight::value()
@@ -1059,6 +1082,7 @@ public:
         } else {
             storage_provider.addEdge(from, to, weight);
         }
+        return *this;
     }
     void removeEdge(
         const index_type& from,
@@ -1157,17 +1181,72 @@ public:
 namespace algorithms {
 
 template<
-    class _ValTp, class _WhtTp,
-    bool _Directed, class _IdxTp,
+    class _ValTp, class _WhtTp, class _IdxTp,
     class _StProv, class _IdxProv
 >
 void BFS(
-    const SimpleGraph<
-        _ValTp, _WhtTp, _Directed, _IdxTp, _StProv, _IdxProv
-    >& cg,
-    const std::function<bool(const _ValTp&)>& on_node
+    const accessors::GraphAccessor<
+        _ValTp, _IdxTp, _WhtTp, _IdxProv, _StProv 
+    >& accessor,
+    const typename accessors::GraphAccessor<
+        _ValTp, _IdxTp, _WhtTp, _IdxProv, _StProv 
+    >::callback_t& on_node
 ) {
-    
+    typedef accessors::GraphAccessor<
+        _ValTp, _IdxTp, _WhtTp, _IdxProv, _StProv 
+    > __accessor;
+    std::unordered_set<_IdxTp> visited;
+    std::queue<__accessor> q;
+    if (accessor.invalid()) return ;
+    q.push(accessor);
+    visited.insert(accessor.raw());
+    while (!q.empty()) {
+        __accessor acc = q.front();
+        q.pop();
+        if (!on_node(*acc)) return ;
+        acc.updateAdjacent(defines::UpdateStrategy::forth);
+        for (auto [idx, vp, wp]: acc.listForth()) {
+            auto iter = visited.find(idx);
+            if (iter == visited.end()) {
+                q.push(acc.next(idx));
+                visited.insert(idx);
+            }
+        }
+    }
+}
+
+template<
+    class _ValTp, class _WhtTp, class _IdxTp,
+    class _StProv, class _IdxProv
+>
+void DFS(
+    const accessors::GraphAccessor<
+        _ValTp, _IdxTp, _WhtTp, _IdxProv, _StProv 
+    >& accessor,
+    const typename accessors::GraphAccessor<
+        _ValTp, _IdxTp, _WhtTp, _IdxProv, _StProv 
+    >::callback_t& on_node
+) {
+    typedef accessors::GraphAccessor<
+        _ValTp, _IdxTp, _WhtTp, _IdxProv, _StProv 
+    > __accessor;
+    std::unordered_set<_IdxTp> visited;
+    if (accessor.invalid()) return ;
+    visited.insert(accessor.raw());
+
+    std::function<void(__accessor)> _rec = 
+    [&visited, &on_node, &_rec](__accessor acc) -> void {
+        if (!on_node(*acc)) return ;
+        acc.updateAdjacent(defines::UpdateStrategy::forth);
+        for (auto [idx, vp, wp]: acc.listForth()) {
+            auto iter = visited.find(idx);
+            if (iter == visited.end()) {
+                visited.insert(idx);
+                _rec(acc.next(idx));
+            }
+        }
+    };
+    _rec(accessor);
 }
 
 }
