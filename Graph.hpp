@@ -1172,6 +1172,39 @@ void DFS(
 }}
 // namespace dsl::graph
 
+// operators for accessor
+
+// equality compare
+template<
+    class _ValTpL, class _ValTpR,
+    class _IdxProvL, class _IdxProvR,
+    class _StProvL, class _StProvR,
+    class _IdxTp, class _WhtTp
+>
+constexpr bool operator== (
+    const dsl::graph::accessors::GraphAccessor<
+        _ValTpL, _IdxTp, _WhtTp, _IdxProvL, _StProvL
+    >& lga,
+    const dsl::graph::accessors::GraphAccessor<
+        _ValTpR, _IdxTp, _WhtTp, _IdxProvR, _StProvR
+    >& rga
+) { return lga.raw() == rga.raw(); }
+// not equal
+template<
+    class _ValTpL, class _ValTpR,
+    class _IdxProvL, class _IdxProvR,
+    class _StProvL, class _StProvR,
+    class _IdxTp, class _WhtTp
+>
+constexpr bool operator!= (
+    const dsl::graph::accessors::GraphAccessor<
+        _ValTpL, _IdxTp, _WhtTp, _IdxProvL, _StProvL
+    >& lga,
+    const dsl::graph::accessors::GraphAccessor<
+        _ValTpR, _IdxTp, _WhtTp, _IdxProvR, _StProvR
+    >& rga
+) { return lga.raw() != rga.raw(); }
+
 // cancel macros
 
 #undef DSL_MACRO_INDEX_TYPE
