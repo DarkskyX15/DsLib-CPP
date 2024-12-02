@@ -73,7 +73,8 @@ concept IndexProvider =
         T::find_key key,
         T::index_type idx,
         T::value_type val,
-        size_t c
+        size_t c,
+        std::vector<typename T::index_type> contain
     ) {
         { t.remove(idx) } ;
         { t.rewind(idx) } ;
@@ -84,6 +85,7 @@ concept IndexProvider =
         { t.size() } -> std::same_as<size_t>;
         { t.at(idx) } -> std::same_as<typename T::value_type&>;
         { ct.at(idx) } -> std::same_as<const typename T::value_type&>;
+        { t.allIndexes(contain) } ;
     }
 ;
 
@@ -435,6 +437,10 @@ public:
     }
     ~DefaultIndexProvider() {
         if (rst_ptr != nullptr) delete rst_ptr;
+    }
+
+    void allIndexes(std::vector<index_type>& contain) const {
+        for (auto& pair: st) contain.emplace_back(pair.first);
     }
 
     index_type insert(const value_type& node) {
@@ -1030,6 +1036,7 @@ public:
     typedef _WhtTp weight_type;
     typedef utils::null_weight<weight_type> null_weight;
     typedef utils::index_limits<index_type> idx_limit;
+    typedef _IdxProv::find_key key_type;
 
     static constexpr index_type nindex = idx_limit::max();
     static constexpr weight_type nweight = _StProv::fallback;
@@ -1037,7 +1044,6 @@ public:
 private:
     typedef _IdxProv index_prov_t;
     typedef _StProv store_prov_t;
-    typedef index_prov_t::find_key key_type;
     typedef
     SimpleGraph<_ValTp, _WhtTp, _Directed, _IdxTp, _StProv, _IdxProv>
     self;
@@ -1083,6 +1089,12 @@ public:
         return index_provider.findAll(key, count);
     }
 
+    std::vector<index_type> allIndexes() const {
+        std::vector<index_type> result;
+        index_provider.allIndexes(result);
+        return result;
+    }
+
     const value_type& nodeAt(const index_type& index) const {
         return index_provider.at(index);
     }
@@ -1124,11 +1136,34 @@ public:
         }
         return *this;
     }
-    void removeEdge(
+    self& addEdgeByKey(
+        const key_type& key_from,
+        const key_type& key_to,
+        const weight_type& weight = null_weight::value()
+    ) {
+        return addEdge(
+            index_provider.find(key_from),
+            index_provider.find(key_to),
+            weight
+        );
+    }
+
+    self& removeEdge(
         const index_type& from,
         const index_type& to
     ) {
         storage_provider.removeEdge(from, to);
+        return *this;
+    }
+    self& removeEdgeByKey(
+        const key_type& key_from,
+        const key_type& key_to
+    ) {
+        storage_provider.removeEdge(
+            index_provider.find(key_from),
+            index_provider.find(key_to)
+        );
+        return *this;
     }
 
     const weight_type& getWeight(
@@ -1137,12 +1172,33 @@ public:
     ) const {
         return storage_provider.getWeight(from, to);
     }
+    const weight_type& getWeightByKey(
+        const key_type& key_from,
+        const key_type& key_to
+    ) const {
+        return storage_provider.getWeight(
+            index_provider.find(key_from),
+            index_provider.find(key_to)
+        );
+    }
+
     void setWeight(
         const index_type& from,
         const index_type& to,
         const weight_type& weight
     ) {
         storage_provider.setWeight(from, to, weight);
+    }
+    void setWeightByKey(
+        const key_type& key_from,
+        const key_type& key_to,
+        const weight_type& weight
+    ) {
+        storage_provider.setWeight(
+            index_provider.find(key_from),
+            index_provider.find(key_to),
+            weight
+        );
     }
 
     value_type& operator[] (const index_type& index) {
