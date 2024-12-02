@@ -200,9 +200,9 @@ enum class UpdateStrategy: uint8_t { forth, both, back, none };
 namespace accessors {
 
 template<
-    DSL_MACRO_VALUE_TYPE _ValTp,
-    DSL_MACRO_INDEX_TYPE _IdxTp,
-    DSL_MACRO_WEIGHT_TYPE _WhtTp
+    class _ValTp,
+    class _IdxTp,
+    class _WhtTp
 >
 struct AdjPreview {
     typedef _ValTp value_type;
@@ -226,27 +226,31 @@ struct AdjPreview {
  * 以及所指结点的所有邻接点的值的引用访问。
  */
 template<
-    DSL_MACRO_VALUE_TYPE _ValTp,
-    DSL_MACRO_INDEX_TYPE _IdxTp,
-    DSL_MACRO_WEIGHT_TYPE _WhtTp,
-    DSL_MACRO_INDEX_PROVIDER _IdxProv,
-    DSL_MACRO_STORE_PROVIDER _StProv
+    class _ValTp,
+    class _IdxTp,
+    class _WhtTp,
+    class _cvIdxProv,
+    class _cvStProv
 >
 class GraphAccessor {
 public:
-    typedef _ValTp value_type;
+    typedef _ValTp& ref_type;
+    typedef std::remove_cv_t<_ValTp> value_type;
     typedef _IdxTp index_type;
     typedef _WhtTp weight_type;
     typedef AdjPreview<_ValTp, _IdxTp, _WhtTp> preview_type;
     typedef std::vector<preview_type> adjacent_list;
 
 private:
+    typedef std::remove_cv_t<_cvIdxProv> index_prov_t;
+    typedef std::remove_cv_t<_cvStProv> store_prov_t;
+
     typedef GraphAccessor<
-        _ValTp, _IdxTp, _WhtTp, _IdxProv, _StProv
+        _ValTp, _IdxTp, _WhtTp, _cvIdxProv, _cvStProv
     > self;
 
-    _IdxProv* index_ptr;
-    _StProv* storage_ptr;
+    _cvIdxProv* index_ptr;
+    _cvStProv* storage_ptr;
     index_type index;
     adjacent_list forth_list, back_list;
 
@@ -292,8 +296,8 @@ private:
 
 public:
     GraphAccessor(
-        _IdxProv* i,
-        _StProv* s,
+        _cvIdxProv* i,
+        _cvStProv* s,
         const index_type& idx
     ): index_ptr(i), storage_ptr(s), index(idx)
     { }
@@ -306,7 +310,7 @@ public:
     /**
      * 返回访问器对应的结点值的引用
      */
-    value_type& operator*() const { return index_ptr->at(index); }
+    ref_type operator*() const { return index_ptr->at(index); }
 
     /**
      * 返回访问器对应的内部下标的值
@@ -996,6 +1000,11 @@ public:
         index_prov_t, store_prov_t
     > accessor;
 
+    typedef accessors::GraphAccessor<
+        const value_type, index_type, weight_type,
+        const index_prov_t, const store_prov_t
+    > const_accessor;
+
     SimpleGraph(){  };
     SimpleGraph(const self& g) { copy_from(g); }
     SimpleGraph(self&& rg) { move_from(rg); }
@@ -1092,7 +1101,6 @@ public:
             );
         }
     }
-
     accessor access(const index_type& init_idx) {
         if (init_idx != idx_limit::max()) {
             return accessor(
@@ -1108,6 +1116,39 @@ public:
             );
         }
     }
+
+    const_accessor const_access() const {
+        index_type idx = index_provider.available();
+        if (idx != idx_limit::max()) {
+            return const_accessor(
+                &index_provider,
+                &storage_provider,
+                idx
+            );
+        } else {
+            return const_accessor(
+                nullptr,
+                nullptr,
+                idx
+            );
+        }
+    }
+    const_accessor const_access(const index_type& init_idx) const {
+        if (init_idx != idx_limit::max()) {
+            return const_accessor(
+                &index_provider,
+                &storage_provider,
+                init_idx
+            );
+        } else {
+            return const_accessor(
+                nullptr,
+                nullptr,
+                init_idx
+            );
+        }
+    }
+
 };
 
 namespace algorithms {
