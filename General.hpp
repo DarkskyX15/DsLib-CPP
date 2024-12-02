@@ -2,6 +2,8 @@
 #ifndef _DSL_GENERAL_HPP_
 #define _DSL_GENERAL_HPP_ 1
 
+#include <limits>
+
 namespace dsl {
 namespace general {
 

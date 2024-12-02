@@ -2,6 +2,8 @@
 #ifndef _DSL_GRAPH_HPP_
 #define _DSL_GRAPH_HPP_
 
+#include "General.hpp"
+
 #include <vector>
 #include <cstddef>
 #include <unordered_map>
@@ -77,7 +79,8 @@ concept IndexProvider =
         { t.rewind(idx) } ;
         { t.insert(val) } -> std::same_as<typename T::index_type>;
         { t.available() } -> std::same_as<typename T::index_type>;
-        { t.find(key, c) } -> std::same_as<std::vector<typename T::index_type>>;
+        { t.findAll(key, c) } -> std::same_as<std::vector<typename T::index_type>>;
+        { t.find(key) } -> std::same_as<typename T::index_type>;
         { t.size() } -> std::same_as<size_t>;
         { t.at(idx) } -> std::same_as<typename T::value_type&>;
         { ct.at(idx) } -> std::same_as<const typename T::value_type&>;
@@ -390,17 +393,25 @@ public:
 template<
     DSL_MACRO_VALUE_TYPE _ValTp,
     DSL_MACRO_DEFAULT_INDEX _IdxTp,
-    DSL_MACRO_PREDICATE(_ValTp, _ValTp) _Equal = std::equal_to<_ValTp>
+    DSL_MACRO_PREDICATE(_ValTp, _ValTp) _Equal = std::equal_to<_ValTp>,
+    bool _EnableReverseHashBoost = true
 >
 class DefaultIndexProvider {
 public:
     typedef _ValTp value_type;
     typedef _IdxTp index_type;
-    typedef utils::index_limits<_IdxTp> limit;
     typedef value_type find_key;
 private:
+    typedef utils::index_limits<_IdxTp> limit;
+    typedef std::unordered_map<value_type, index_type> reverse_map_t;
+    static constexpr bool enable_rhb = (
+        general::utils::is_hashable_v<value_type> &&
+        _EnableReverseHashBoost
+    );
+
     index_type present_index;
     std::unordered_map<index_type, value_type> st;
+    std::unordered_map<value_type, index_type>* rst_ptr;
 public:
 #ifdef DSL_DEBUG
 
@@ -409,15 +420,29 @@ public:
             std::cout << index << "=>" << val << '\n';
         }
         std::cout << "Total: " << st.size() << '\n';
+        if constexpr (enable_rhb) {
+            std::cout << "Have reverse map.\n";
+        }
     }
 
 #endif
 
     DefaultIndexProvider():
-    present_index(limit::min()), st() { }
+    present_index(limit::min()), st(), rst_ptr(nullptr) { 
+        if constexpr (enable_rhb) {
+            rst_ptr = new reverse_map_t();
+        }
+    }
+    ~DefaultIndexProvider() {
+        if (rst_ptr != nullptr) delete rst_ptr;
+    }
 
     index_type insert(const value_type& node) {
-        st.insert(std::make_pair(present_index, node));
+        st.emplace(present_index, node);
+        // create reverse map if value is hashable
+        if constexpr (enable_rhb) {
+            rst_ptr->emplace(node, present_index);
+        }
         if (present_index < limit::max() - 1) return present_index++;
         return present_index;
     }
@@ -425,19 +450,34 @@ public:
 
     size_t size() const { return st.size(); }
 
-    std::vector<index_type> find(const find_key& node, size_t count) const {
+    std::vector<index_type> findAll(const find_key& node, size_t count) const {
         std::vector<index_type> results;
-        for (
-            auto iter = st.cbegin();
-            iter != st.cend() && count > 0;
-            ++iter
-        ) {
-            if (_Equal()(iter->second, node)) {
-                results.push_back(iter->first);
-                --count;
+        if constexpr (enable_rhb) {
+            results.emplace_back(rst_ptr->at(node));
+        } else {
+            for (
+                auto iter = st.cbegin();
+                iter != st.cend() && count > 0;
+                ++iter
+            ) {
+                if (_Equal()(iter->second, node)) {
+                    results.emplace_back(iter->first);
+                    --count;
+                }
             }
         }
         return results;
+    }
+
+    index_type find(const find_key& node) const {
+        if constexpr (enable_rhb) {
+            return rst_ptr->at(node);
+        } else {
+            for (auto iter = st.cbegin(); iter != st.cend(); ++iter) {
+                if (_Equal()(iter->second, node)) return iter->first;
+            }
+            return limit::max();
+        }
     }
 
     const value_type& at(index_type index) const { return st.at(index); }
@@ -1040,7 +1080,7 @@ public:
     std::vector<index_type> findIndexes(
         const key_type& key, size_t count = 1
     ) const {
-        return index_provider.find(key, count);
+        return index_provider.findAll(key, count);
     }
 
     const value_type& nodeAt(const index_type& index) const {
