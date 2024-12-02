@@ -8,6 +8,7 @@
 #include <limits>
 #include <queue>
 #include <stdint.h>
+#include <functional>
 
 #if __cplusplus >= 202002L
 #include <concepts>
@@ -283,8 +284,10 @@ private:
         index_ptr = gc.index_ptr;
         storage_ptr = gc.storage_ptr;
         index = gc.index;
+#ifdef DSL_MACRO_COPY_FULL_ACCESSOR 
         forth_list = gc.forth_list;
         back_list = gc.back_list;
+#endif
     }
     void move_from(self& gc) {
         index_ptr = gc.index_ptr;
@@ -1158,12 +1161,13 @@ template<
     bool _Directed, class _IdxTp,
     class _StProv, class _IdxProv
 >
-void DFS(
+void BFS(
     const SimpleGraph<
         _ValTp, _WhtTp, _Directed, _IdxTp, _StProv, _IdxProv
-    >& cg
+    >& cg,
+    const std::function<bool(const _ValTp&)>& on_node
 ) {
-    std::cout << _Directed << '\n';
+    
 }
 
 }
