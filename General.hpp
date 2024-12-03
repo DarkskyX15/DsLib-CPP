@@ -9,6 +9,8 @@ namespace general {
 
 namespace utils {
 
+#if __cpp_constexpr >= 201304L && defined(__cpp_variable_templates)
+
 template <typename T>
 struct is_hashable
 {
@@ -27,6 +29,8 @@ struct is_hashable
 
 template<typename T>
 constexpr bool is_hashable_v = is_hashable<T>::value;
+
+#endif
 
 }
 // namespace dsl::utils

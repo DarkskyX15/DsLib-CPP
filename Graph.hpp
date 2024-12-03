@@ -2,6 +2,8 @@
 #ifndef _DSL_GRAPH_HPP_
 #define _DSL_GRAPH_HPP_
 
+#if defined(__cpp_structured_bindings) && defined(__cpp_variable_templates) && defined(__cpp_if_constexpr)
+
 #include "General.hpp"
 
 #include <vector>
@@ -13,7 +15,7 @@
 #include <stdint.h>
 #include <functional>
 
-#if __cplusplus >= 202002L
+#ifdef __cpp_concepts
 #include <concepts>
 
 namespace dsl {
@@ -63,14 +65,14 @@ template<class T>
 concept IndexProvider = 
     std::default_initializable<T> &&
     requires {
-        typename T::find_key;
+        typename T::key_type;
         typename T::index_type;
         typename T::value_type;
     } &&
     requires(
         T t,
         const T ct,
-        T::find_key key,
+        T::key_type key,
         T::index_type idx,
         T::value_type val,
         size_t c,
@@ -80,12 +82,13 @@ concept IndexProvider =
         { t.rewind(idx) } ;
         { t.insert(val) } -> std::same_as<typename T::index_type>;
         { t.available() } -> std::same_as<typename T::index_type>;
-        { t.findAll(key, c) } -> std::same_as<std::vector<typename T::index_type>>;
+        { t.findAll(key) } -> std::same_as<std::vector<typename T::index_type>>;
         { t.find(key) } -> std::same_as<typename T::index_type>;
         { t.size() } -> std::same_as<size_t>;
         { t.at(idx) } -> std::same_as<typename T::value_type&>;
         { ct.at(idx) } -> std::same_as<const typename T::value_type&>;
         { t.allIndexes(contain) } ;
+        { t.emplace() };
     }
 ;
 
@@ -191,6 +194,29 @@ template<DSL_MACRO_INDEX_TYPE T>
 struct index_limits {
     static constexpr T max() noexcept { return std::numeric_limits<T>::max(); }
     static constexpr T min() noexcept { return std::numeric_limits<T>::min(); }
+};
+
+
+/**
+ * @brief 自定义类型的键选择器
+ * @tparam T 给定类型
+ * @details 
+ * 若图的值类型为自定义类型，可以特化该结构体来指定自定义类型的键以方便部分函数的使用。
+ * 特化时需定义的类型如下：
+ * -# key_type 键类型标识
+ * 特化时需重写的函数如下：
+ * -# static constexpr const key_type& key(const T&)
+ * -# static constexpr key_type& key(T&)
+ * -# static constexpr key_type&& arg(Args&&...)
+ */
+template<class T>
+struct key_selector {
+    typedef T key_type;
+    static constexpr const key_type& key(const T& t) { return t; }
+    static constexpr key_type& key(T& t) { return t; }
+
+    // static constexpr key_type&& arg()
+    // 
 };
 
 }
@@ -395,35 +421,38 @@ public:
 template<
     DSL_MACRO_VALUE_TYPE _ValTp,
     DSL_MACRO_DEFAULT_INDEX _IdxTp,
-    DSL_MACRO_PREDICATE(_ValTp, _ValTp) _Equal = std::equal_to<_ValTp>,
     bool _EnableReverseHashBoost = true
 >
 class DefaultIndexProvider {
 public:
     typedef _ValTp value_type;
     typedef _IdxTp index_type;
-    typedef value_type find_key;
+    typedef utils::key_selector<value_type>::key_type key_type;
 private:
+    typedef utils::key_selector<value_type> select_key;
     typedef utils::index_limits<_IdxTp> limit;
-    typedef std::unordered_map<value_type, index_type> reverse_map_t;
+    typedef std::unordered_map<key_type, index_type> reverse_map_t;
     static constexpr bool enable_rhb = (
-        general::utils::is_hashable_v<value_type> &&
+        general::utils::is_hashable_v<key_type> &&
         _EnableReverseHashBoost
     );
 
     index_type present_index;
     std::unordered_map<index_type, value_type> st;
-    std::unordered_map<value_type, index_type>* rst_ptr;
+    reverse_map_t* rst_ptr;
 public:
 #ifdef DSL_DEBUG
 
     void _show() const {
-        for (auto [index, val]: st) {
-            std::cout << index << "=>" << val << '\n';
+        for (auto& [index, val]: st) {
+            std::cout << index << "=>" << &val << '\n';
         }
         std::cout << "Total: " << st.size() << '\n';
         if constexpr (enable_rhb) {
-            std::cout << "Have reverse map.\n";
+            std::cout << "Have reverse map:\n";
+            for (auto& [f, v]: *rst_ptr) {
+                std::cout << f << "=>" << v << '\n';
+            }
         }
     }
 
@@ -436,7 +465,9 @@ public:
         }
     }
     ~DefaultIndexProvider() {
-        if (rst_ptr != nullptr) delete rst_ptr;
+        if constexpr (enable_rhb) {
+            if (rst_ptr != nullptr) delete rst_ptr;
+        }
     }
 
     void allIndexes(std::vector<index_type>& contain) const {
@@ -447,7 +478,35 @@ public:
         st.emplace(present_index, node);
         // create reverse map if value is hashable
         if constexpr (enable_rhb) {
-            rst_ptr->emplace(node, present_index);
+            rst_ptr->emplace(
+                select_key::key(node),
+                present_index
+            );
+        }
+        if (present_index < limit::max() - 1) return present_index++;
+        return present_index;
+    }
+    template<class... Args>
+    index_type emplace(Args&&... args) {
+        st.emplace(
+            std::piecewise_construct, 
+            std::forward_as_tuple(present_index),
+            std::forward_as_tuple(args...)
+        );
+        // create reverse map if key is hashable
+        if constexpr (enable_rhb) {
+            if constexpr (std::is_same_v<key_type, value_type>) {
+                rst_ptr->emplace(
+                    std::piecewise_construct,
+                    std::forward_as_tuple(args...),
+                    std::forward_as_tuple(present_index)
+                );
+            } else {
+                rst_ptr->emplace(
+                    select_key::arg(args...),
+                    present_index
+                );
+            }
         }
         if (present_index < limit::max() - 1) return present_index++;
         return present_index;
@@ -456,31 +515,30 @@ public:
 
     size_t size() const { return st.size(); }
 
-    std::vector<index_type> findAll(const find_key& node, size_t count) const {
+    std::vector<index_type> findAll(const key_type& key) const {
         std::vector<index_type> results;
         if constexpr (enable_rhb) {
-            results.emplace_back(rst_ptr->at(node));
+            results.emplace_back(rst_ptr->at(key));
         } else {
             for (
                 auto iter = st.cbegin();
-                iter != st.cend() && count > 0;
+                iter != st.cend();
                 ++iter
             ) {
-                if (_Equal()(iter->second, node)) {
+                if (select_key::key(iter->second) == key) {
                     results.emplace_back(iter->first);
-                    --count;
                 }
             }
         }
         return results;
     }
 
-    index_type find(const find_key& node) const {
+    index_type find(const key_type& key) const {
         if constexpr (enable_rhb) {
-            return rst_ptr->at(node);
+            return rst_ptr->at(key);
         } else {
             for (auto iter = st.cbegin(); iter != st.cend(); ++iter) {
-                if (_Equal()(iter->second, node)) return iter->first;
+                if (select_key::key(iter->second) == key) return iter->first;
             }
             return limit::max();
         }
@@ -1011,15 +1069,14 @@ public:
 
 };
 
-/**
- * 简单图的通用抽象
- * 模板参数：
- * `_ValTp` 值类型
- * `_WhtTp` 权重类型
- * `_Directed` 是否为有向图
- * `_IdxTp` 下标类型
- * `_StProv` 储存提供类型
- * `_IdxProv` 下标提供类型
+/*!
+ * @brief 
+ * @tparam _ValTp 
+ * @tparam _WhtTp 
+ * @tparam _Directed 
+ * @tparam _IdxTp 
+ * @tparam _StProv 
+ * @tparam _IdxProv 
  */
 template<
     DSL_MACRO_VALUE_TYPE _ValTp,
@@ -1036,7 +1093,7 @@ public:
     typedef _WhtTp weight_type;
     typedef utils::null_weight<weight_type> null_weight;
     typedef utils::index_limits<index_type> idx_limit;
-    typedef _IdxProv::find_key key_type;
+    typedef _IdxProv::key_type key_type;
 
     static constexpr index_type nindex = idx_limit::max();
     static constexpr weight_type nweight = _StProv::fallback;
@@ -1105,6 +1162,13 @@ public:
     index_type addNode(const value_type& val) {
         storage_provider.sync(index_provider.size() + 1);
         index_type idx = index_provider.insert(val);
+        storage_provider.addIndex(idx);
+        return idx;
+    }
+    template<class... Args>
+    index_type emplaceNode(Args... args) {
+        storage_provider.sync(index_provider.size() + 1);
+        index_type idx = index_provider.emplace(std::forward<Args>(args)...);
         storage_provider.addIndex(idx);
         return idx;
     }
@@ -1345,6 +1409,16 @@ void DFS(
     _rec(accessor);
 }
 
+// TODO Single source shortest path
+void Dijkstra() {
+
+}
+
+// TODO Multiple source shortest path
+void Floyd() {
+
+}
+
 }
 // namespace dsl::graph::algorithms
 
@@ -1395,4 +1469,5 @@ constexpr bool operator!= (
 #undef DSL_MACRO_DEFAULT_INDEX
 #undef DSL_MACRO_HASH_INDEX
 
+#endif
 #endif /* _DSL_GRAPH_HPP_ */
