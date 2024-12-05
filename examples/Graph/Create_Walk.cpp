@@ -26,11 +26,12 @@ struct utils::key_selector<Person> {
     static constexpr std::string& key(Person& p) {
         return p.name;
     }
-    static constexpr std::string&& arg(
-        std::string&& ,
-        std::string&& s,
-        size_t&&
-    ) { return static_cast<std::string&&>(s); }
+    template<class R1, class R2, class R3>
+    static constexpr R2&& arg(
+        R1&&  ,
+        R2&& s,
+        R3&&
+    ) { return static_cast<R2&&>(s); }
 };
 
 int main() {
@@ -41,7 +42,7 @@ int main() {
     > g;
 
     std::string card1 = "idCardNo1";
-    std::string name1 = "FS";
+    const std::string name1 = "FS";
 
     // emplace node
     g.emplaceNode(card1, name1, 515);
