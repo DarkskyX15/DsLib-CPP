@@ -215,8 +215,9 @@ struct key_selector {
     static constexpr const key_type& key(const T& t) { return t; }
     static constexpr key_type& key(T& t) { return t; }
 
-    // static constexpr key_type&& arg()
-    // 
+    static constexpr key_type&& arg(key_type&& key) {
+        return static_cast<key_type&&>(key); 
+    }
 };
 
 }
@@ -1172,7 +1173,7 @@ public:
         return idx;
     }
     template<class... Args>
-    index_type emplaceNode(Args... args) {
+    index_type emplaceNode(Args&&... args) {
         storage_provider.sync(index_provider.size() + 1);
         index_type idx = index_provider.emplace(std::forward<Args>(args)...);
         storage_provider.addIndex(idx);
