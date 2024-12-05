@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 #include <stack>
-#include "Graph.hpp"
+#include "../../Graph.hpp"
 
 using dsl::graph::defines::UpdateStrategy;
 using namespace dsl::graph;
@@ -39,15 +39,18 @@ int main() {
         DefaultIndexProvider<Person, size_t>
     > g;
 
+    std::string card1 = "idCardNo1";
+    std::string name1 = "FS";
+
     // emplace node
-    g.emplaceNode("idCardNo1", "FS", 515);
+    g.emplaceNode(card1, name1, 515);
     g.emplaceNode("idCardNo2", "FFFF", 1145);
     g.emplaceNode("idCardNo3", "SA", 515);
     g.emplaceNode("idCardNo4", "DS", 1115);
     g.emplaceNode("idCardNo5", "TH", 5520);
 
     // add edge
-    g.addEdgeByKey("FS", "FFFF")
+    g.addEdgeByKey(name1, "FFFF")
      .addEdgeByKey("FFFF", "DS")
      .addEdgeByKey("FS", "TH")
      .addEdgeByKey("SA", "TH");
