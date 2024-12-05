@@ -1,6 +1,6 @@
 # dev env
 .vscode
-main.cpp
+/main.cpp
 
 # Prerequisites
 *.d
