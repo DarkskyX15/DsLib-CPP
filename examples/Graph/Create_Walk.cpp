@@ -16,6 +16,7 @@ struct Person {
     bool operator!=(const Person& p) const { return !operator==(p); }
 };
 
+// select key from custom data type
 template<>
 struct utils::key_selector<Person> {
     typedef std::string key_type;
