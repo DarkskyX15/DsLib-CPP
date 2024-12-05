@@ -1143,7 +1143,13 @@ public:
     std::vector<index_type> findIndexes(
         const key_type& key, size_t count = 1
     ) const {
-        return index_provider.findAll(key, count);
+        return index_provider.findAll(key);
+    }
+
+    index_type find(
+        const key_type& key
+    ) const {
+        return index_provider.find(key);
     }
 
     std::vector<index_type> allIndexes() const {
